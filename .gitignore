@@ -1,0 +1,5 @@
+node_modules/
+dist/
+tap/bin/
+tap/obj/
+*.log
