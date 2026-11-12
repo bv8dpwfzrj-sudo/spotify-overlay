@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('api', {
   cmd: c => ipcRenderer.send('cmd', String(c)),
   setLayout: l => ipcRenderer.send('layout', l),
   lyrics: q => ipcRenderer.invoke('lyrics', q),
+  onToggleFs: cb => ipcRenderer.on('toggle-fs', cb),
   onPcm: cb => ipcRenderer.on('pcm', (_, b) => cb(b)),
   onTapStatus: cb => ipcRenderer.on('tap-status', (_, s) => cb(s)),
   drag: (dx, dy) => ipcRenderer.send('drag', dx, dy),

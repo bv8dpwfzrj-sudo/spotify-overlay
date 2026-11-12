@@ -15,6 +15,7 @@ A small, see-through, always-on-top widget for Windows that shows what Spotify i
 - Beat pulse and a glow around the album art based on its edge colors
 - Synced lyrics (from [LRCLIB](https://lrclib.net)) with font, size, color, alignment, animation (incl. karaoke fill), glow and sync offset
 - Layouts: full, compact strip, visualizer only; optional fade when idle
+- **Full-screen "now playing" mode** (F11 / ⛶ / tray): big album art, title, lyrics and visualizer over a blurred album-art, accent or black background; controls hide when the mouse is idle
 - Remembers position and settings; optional start with Windows; tray menu
 
 ## Install
@@ -29,6 +30,7 @@ A small, see-through, always-on-top widget for Windows that shows what Spotify i
 
 - Drag the card to move it. Hover it for the playback buttons and volume slider.
 - Double-click the card to switch visualizer style.
+- Press **F11** (or click **⛶**) for full screen; **Esc** or **F11** to leave.
 - **⚙** (top right on hover) opens settings. The tray icon has layout, click-through lock, start with Windows and Quit.
 
 ## Privacy

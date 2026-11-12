@@ -83,7 +83,7 @@ function createWindow() {
     try { fs.appendFileSync(path.join(os.tmpdir(), 'spotify-overlay-log.txt'), msg + '\n'); } catch {}
   });
   win.loadFile('index.html');
-  win.on('moved', () => { const b = win.getBounds(); cfg.x = b.x; cfg.bottom = b.y + b.height; save(); });
+  win.on('moved', () => { if (inFs) return; const b = win.getBounds(); cfg.x = b.x; cfg.bottom = b.y + b.height; save(); });
 }
 
 app.whenReady().then(() => {
@@ -102,6 +102,7 @@ app.whenReady().then(() => {
   const lay = (label, id) => ({ label, click: () => win.webContents.send('set-layout', id) });
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Layout', submenu: [lay('Full', 'full'), lay('Compact strip', 'compact'), lay('Visualizer only', 'viz')] },
+    { label: 'Full screen (Esc to exit)', click: () => win.webContents.send('toggle-fs') },
     { label: 'Next visualizer style', click: () => win.webContents.send('cycle-viz') },
     { label: 'Click-through (lock)', type: 'checkbox', checked: !!cfg.clickThrough,
       click: i => { cfg.clickThrough = i.checked; save(); win.setIgnoreMouseEvents(i.checked, { forward: true }); } },
@@ -160,8 +161,17 @@ ipcMain.handle('lyrics', async (_, q) => {
 ipcMain.on('cmd',(_, c) => {
   if (/^(playpause|next|prev|seek:[0-9.]+|vol:[+-]?[0-9.]+|volset:[0-9.]+)$/.test(c)) { try { fs.appendFileSync(cmdFile, c + '\n'); } catch {} }
 });
+let inFs = false, prevBounds = null;
 ipcMain.on('layout', (_, name) => {
-  const sz = LAYOUTS[name]; if (!sz || !win) return;
+  if (!win) return;
+  if (name === 'screen') { // full-screen "now playing" mode: cover the whole display the widget is on
+    if (!inFs) { prevBounds = win.getBounds(); inFs = true; }
+    win.setBounds(screen.getDisplayMatching(prevBounds).bounds);
+    win.setAlwaysOnTop(true, 'screen-saver'); win.focus();
+    return;
+  }
+  if (inFs) { inFs = false; if (prevBounds) win.setBounds(prevBounds); }
+  const sz = LAYOUTS[name]; if (!sz) return;
   const b = win.getBounds();
   win.setBounds({ x: b.x, y: b.y + b.height - sz[1], width: sz[0], height: sz[1] });
 });
@@ -170,7 +180,7 @@ ipcMain.on('drag', (_, dx, dy) => {
   const b = win.getBounds();
   win.setBounds({ x: b.x + Math.round(dx), y: b.y + Math.round(dy), width: b.width, height: b.height });
 });
-ipcMain.on('drag-end', () => { const b = win.getBounds(); cfg.x = b.x; cfg.bottom = b.y + b.height; save(); });
+ipcMain.on('drag-end', () => { if (inFs) return; const b = win.getBounds(); cfg.x = b.x; cfg.bottom = b.y + b.height; save(); });
 ipcMain.on('quit',() => { app.isQuitting = true; app.quit(); });
 app.on('before-quit', () => { app.isQuitting = true; if (ps) ps.kill(); if (tap) tap.kill(); });
 app.on('window-all-closed', () => app.quit());

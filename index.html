@@ -28,8 +28,8 @@
   #c_vol::-webkit-slider-runnable-track{width:4px;border-radius:2px;background:rgba(255,255,255,.3)}
   #c_vol::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:#fff;margin-left:-4px;box-shadow:0 0 4px rgba(0,0,0,.6)}
   body.compact #vsl,body.viz #vsl{display:none}
-  body:not(.compact):not(.viz) #row{right:50px}
-  body:not(.compact):not(.viz) #lyr{right:50px}
+  body:not(.compact):not(.viz):not(.fs) #row{right:50px}
+  body:not(.compact):not(.viz):not(.fs) #lyr{right:50px}
   #prog{position:absolute;left:14px;right:14px;bottom:6px;display:flex;gap:8px;align-items:center;font-size:11px;font-variant-numeric:tabular-nums;text-shadow:0 1px 4px #000}
   #p,#d{min-width:30px}#d{text-align:right}
   #barw{flex:1;height:20px;display:flex;align-items:center;cursor:pointer;-webkit-app-region:no-drag}
@@ -37,8 +37,43 @@
   #barw:hover #bar,#barw.drag #bar{height:7px}
   #fill{height:100%;width:0;background:var(--accent,#1db954);border-radius:3px}
   .btn{position:absolute;top:6px;font-size:13px;opacity:0;cursor:pointer;-webkit-app-region:no-drag;padding:2px 6px;z-index:5}
-  #x{right:8px}#g{right:30px}
+  #x{right:8px}#g{right:30px}#fsb{right:52px}
   #card:hover .btn{opacity:.7}.btn:hover{opacity:1!important}
+
+  /* full-screen "now playing" mode */
+  #bg{display:none;position:absolute;inset:-60px;background:center/cover no-repeat;filter:blur(70px) brightness(.5) saturate(1.4);transition:background-image .6s}
+  body.fs{cursor:default}
+  body.fs.idlecur,body.fs.idlecur *{cursor:none!important}
+  body.fs #card{inset:0;border-radius:0;background:#07070b;box-shadow:none}
+  body.fs.bg-art #bg{display:block}
+  body.fs.bg-accent #card{background:linear-gradient(135deg,color-mix(in srgb,var(--accent,#1db954) 45%,#05050a),#05050a 78%)}
+  body.fs.bg-black #card{background:#000}
+  body.fs #row{left:7vw;right:7vw;top:0;bottom:12vh;gap:5vw;align-items:center}
+  body.fs #art{width:min(46vh,36vw);height:min(46vh,36vw);border-radius:2.4vh}
+  body.fs #title{font-size:6vh;line-height:1.12;white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  body.fs #artist{font-size:3.4vh;margin-top:1vh;white-space:normal}
+  body.fs #ctrl{opacity:1;margin-top:3.5vh;gap:2vh;transition:opacity .4s}
+  body.fs #ctrl div{width:7vh;height:7vh}
+  body.fs #ctrl svg{width:3.4vh;height:3.4vh}
+  body.fs #prog{left:7vw;right:7vw;bottom:6vh;font-size:2.2vh;gap:1.6vw}
+  body.fs #p,body.fs #d{min-width:5vw}
+  body.fs #barw{height:34px}
+  body.fs #bar{height:6px}body.fs #barw:hover #bar,body.fs #barw.drag #bar{height:10px}
+  body.fs #lyr{left:7vw;right:7vw;bottom:17vh}
+  body.fs #vsl{display:flex;right:3vw;top:50%;transform:translateY(-50%);height:34vh;width:5vh;border-radius:2.5vh;padding:1.6vh 0;transition:opacity .4s;opacity:1}
+  body.fs #vsl svg{width:2.6vh;height:2.6vh}
+  body.fs #c_vol{width:6px}
+  /* top-right bar: clock + buttons share one look/baseline; buttons slide off-screen when idle and the clock slides to the edge */
+  body.fs .btn,body.fs #clock{position:fixed;top:1.6vh;height:5vh;margin:0;padding:0 1.3vh;display:flex;align-items:center;box-sizing:border-box;
+    font-size:2.6vh;line-height:1;opacity:.7;text-shadow:none;transition:transform .45s cubic-bezier(.2,.8,.2,1),opacity .45s}
+  body.fs #clock{right:10.4vw;font-variant-numeric:tabular-nums;white-space:nowrap}
+  body.fs #x{right:1.2vw}body.fs #g{right:4.3vw}body.fs #fsb{right:7.4vw}
+  body.fs.idlecur .btn{transform:translateX(16vw);opacity:0!important}
+  body.fs.idlecur #clock{transform:translateX(9.2vw)}
+  body.fs.idlecur #ctrl,body.fs.idlecur #vsl{opacity:0!important}
+  body.fs #panel{inset:auto;left:50%;top:50%;transform:translate(-50%,-50%);width:min(620px,92vw);max-height:84vh;border-radius:18px;font-size:15px;
+    box-shadow:0 20px 80px rgba(0,0,0,.7);padding:16px 22px}
+  body.fs #vt{font-size:2.4vh}
 
   /* lyrics */
   #lyr{position:absolute;left:14px;right:14px;bottom:30px;display:none;flex-direction:column;gap:2px;pointer-events:none;overflow:hidden}
@@ -86,6 +121,7 @@
   #status{opacity:.6;font-size:11px;margin-top:6px}
 </style></head><body>
 <div id="card">
+  <div id="bg"></div>
   <canvas id="cv"></canvas>
   <div id="row">
     <div id="art"></div>
@@ -101,7 +137,7 @@
   <div id="vsl" title="Spotify volume"><svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9zM16.5 12A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4z"/></svg><input type="range" id="c_vol" min="0" max="100" step="1" value="100"></div>
   <div id="vt"><span id="vi">🔊</span><div class="vb"><div class="vf" id="vf"></div></div><span id="vn">0%</span></div>
   <div id="lyr"><div id="ly1"></div><div id="ly2"></div></div>
-  <div id="g" class="btn" title="Settings">⚙</div><div id="x" class="btn" onclick="api.quit()">✕</div>
+  <div id="fsb" class="btn" title="Full screen (F11)">⛶</div><div id="g" class="btn" title="Settings">⚙</div><div id="x" class="btn" onclick="api.quit()">✕</div>
   <div id="panel">
     <div class="top"><span>Settings</span><span id="done">Done</span></div>
     <div class="grid">
@@ -116,6 +152,7 @@
       <label>Fade when idle <input type="checkbox" id="s_autoHide"></label>
       <label>Sensitivity <input type="range" id="s_sens" min="0.4" max="3" step="0.1"></label>
       <label>Opacity <input type="range" id="s_alpha" min="0.2" max="1" step="0.05"></label>
+      <label>Full screen background <select id="s_fsBg"><option value="art">Blurred album art</option><option value="accent">Accent gradient</option><option value="black">Black</option></select></label>
       <label>Audio source <select id="s_source"><option value="spotify">Spotify only</option><option value="system">All system audio</option></select></label>
       <div class="sec">Lyrics</div>
       <label>Show lyrics <input type="checkbox" id="s_lyrics"></label>
@@ -141,7 +178,7 @@ new ResizeObserver(fit).observe(cv);
 
 /* ---------- settings ---------- */
 const STYLES=['Bars','Mirror bars','Spectrum fill','Sound wave','Radial burst','Circle wave','LED dots','Dual wave'];
-const DEF={style:0,flipH:false,flipV:false,sym:false,color:'album',custom:'#1db954',bars:48,sens:1.3,alpha:.85,layout:'full',beat:true,autoHide:false,source:'spotify',
+const DEF={style:0,flipH:false,flipV:false,sym:false,color:'album',custom:'#1db954',bars:48,sens:1.3,alpha:.85,layout:'full',beat:true,autoHide:false,source:'spotify',fsBg:'art',
   lyrics:true,lyFont:'Segoe UI',lySize:15,lyBold:true,lyColor:'white',lyCustom:'#ffffff',lyAlign:'center',lyAnim:'fade',lyNext:true,lyGlow:true,lyOff:0};
 let S=Object.assign({},DEF);
 try{Object.assign(S,JSON.parse(localStorage.viz2||'{}'))}catch{}
@@ -150,7 +187,7 @@ $('s_style').innerHTML=STYLES.map((n,i)=>'<option value="'+i+'">'+n+'</option>')
 function syncUI(){
   $('s_layout').value=S.layout;$('s_style').value=S.style;$('s_color').value=S.color;$('s_custom').value=S.custom;
   $('s_flipH').checked=S.flipH;$('s_flipV').checked=S.flipV;$('s_sym').checked=S.sym;$('s_beat').checked=S.beat;$('s_autoHide').checked=S.autoHide;
-  $('s_bars').value=S.bars;$('s_sens').value=S.sens;$('s_alpha').value=S.alpha;$('s_source').value=S.source;
+  $('s_bars').value=S.bars;$('s_sens').value=S.sens;$('s_alpha').value=S.alpha;$('s_source').value=S.source;$('s_fsBg').value=S.fsBg;applyFsBg();
   $('s_lyrics').checked=S.lyrics;$('s_lyFont').value=S.lyFont;$('s_lySize').value=S.lySize;$('s_lyBold').checked=S.lyBold;
   $('s_lyColor').value=S.lyColor;$('s_lyCustom').value=S.lyCustom;$('s_lyAlign').value=S.lyAlign;$('s_lyAnim').value=S.lyAnim;
   $('s_lyNext').checked=S.lyNext;$('s_lyGlow').checked=S.lyGlow;$('s_lyOff').value=S.lyOff}
@@ -163,15 +200,26 @@ bind('s_lyNext','lyNext',B,'checked');bind('s_lyGlow','lyGlow',B,'checked');bind
 bind('s_layout','layout');bind('s_style','style',Number);bind('s_color','color');bind('s_custom','custom');
 bind('s_flipH','flipH',v=>v,'checked');bind('s_flipV','flipV',v=>v,'checked');bind('s_sym','sym',v=>v,'checked');
 bind('s_beat','beat',v=>v,'checked');bind('s_autoHide','autoHide',v=>v,'checked');
-bind('s_bars','bars',Number);bind('s_sens','sens',Number);bind('s_alpha','alpha',Number);bind('s_source','source');
+bind('s_bars','bars',Number);bind('s_sens','sens',Number);bind('s_alpha','alpha',Number);bind('s_source','source');bind('s_fsBg','fsBg');$('s_fsBg').addEventListener('input',applyFsBg);
 
 /* layout: 'full' | 'compact' | 'viz'. The settings panel always opens in full size. */
 let curLayout='full';
-function applyLayout(l){curLayout=l;document.body.classList.remove('compact','viz');if(l!=='full')document.body.classList.add(l);api.setLayout(l);setTimeout(()=>{fit();renderLyr(lyIdx)},60)}
+function applyLayout(l){curLayout=l;const cl=document.body.classList;cl.remove('compact','viz','fs');
+  if(l==='screen')cl.add('fs');else if(l!=='full')cl.add(l);
+  api.setLayout(l);setTimeout(()=>{fit();renderLyr(lyIdx)},80);setTimeout(()=>{fit();renderLyr(lyIdx)},400)}
+/* full-screen now-playing mode (not remembered across launches) */
+let fsOn=false;
+function toggleFs(){fsOn=!fsOn;$('panel').classList.remove('open');applyLayout(fsOn?'screen':S.layout);curCursorWake()}
+function applyFsBg(){const cl=document.body.classList;cl.remove('bg-art','bg-accent','bg-black');cl.add('bg-'+S.fsBg)}
+let curTimer=null;
+function curCursorWake(){document.body.classList.remove('idlecur');clearTimeout(curTimer);if(fsOn)curTimer=setTimeout(()=>document.body.classList.add('idlecur'),3000)}
+addEventListener('mousemove',curCursorWake);
+addEventListener('keydown',e=>{if(e.key==='Escape'&&fsOn)toggleFs();else if(e.key==='F11'){e.preventDefault();toggleFs()}});
+$('fsb').onclick=toggleFs;api.onToggleFs(toggleFs);
 applyLayout(S.layout);
-$('g').onclick=()=>{applyLayout('full');$('panel').classList.add('open')};
-$('done').onclick=()=>{$('panel').classList.remove('open');applyLayout(S.layout)};
-api.onSetLayout(l=>{S.layout=l;saveS();syncUI();$('panel').classList.remove('open');applyLayout(l)});
+$('g').onclick=()=>{if(!fsOn)applyLayout('full');$('panel').classList.add('open')};
+$('done').onclick=()=>{$('panel').classList.remove('open');if(!fsOn)applyLayout(S.layout)};
+api.onSetLayout(l=>{S.layout=l;saveS();syncUI();$('panel').classList.remove('open');fsOn=false;applyLayout(l)});
 function nextStyle(){S.style=(S.style+1)%STYLES.length;saveS();syncUI()}
 api.onCycleViz(nextStyle);
 $('card').addEventListener('dblclick',e=>{if(!e.target.closest('#panel,#ctrl,#barw'))nextStyle()});
@@ -197,8 +245,8 @@ api.onMedia(x=>{
   if(changed){
     $('title').textContent=x.active?(x.title||'Unknown'):'Nothing playing';
     $('artist').textContent=x.active?(x.artist||''):'Open Spotify';
-    if(x.art){const url='file:///'+x.art.replace(/\\/g,'/')+'?'+Date.now();$('art').style.backgroundImage='url("'+url+'")';grabColor(url)}
-    else $('art').style.backgroundImage='none';
+    if(x.art){const url='file:///'+x.art.replace(/\\/g,'/')+'?'+Date.now();$('art').style.backgroundImage='url("'+url+'")';$('bg').style.backgroundImage='url("'+url+'")';grabColor(url)}
+    else{$('art').style.backgroundImage='none';$('bg').style.backgroundImage='none'}
   }
   const lk=x.active?x.title+'|'+x.artist:'';
   if(lk!==lyKey)lyLoad(x,lk);
@@ -233,7 +281,7 @@ function renderLyr(i){
   const a1=$('ly1'),a2=$('ly2');
   if(!S.lyrics||!lyr||i<0||!lyr[i]){a1.textContent='';a2.textContent='';document.body.classList.remove('haslyr');return}
   document.body.classList.add('haslyr');
-  const size=curLayout==='compact'?Math.min(S.lySize,12):S.lySize;
+  const size=curLayout==='compact'?Math.min(S.lySize,12):curLayout==='screen'?Math.round(innerHeight*.04*(S.lySize/15)):S.lySize;
   a1.textContent=lyr[i].text||'♪';
   a2.textContent=S.lyNext&&lyr[i+1]?(lyr[i+1].text||'♪'):'';
   fitLine(a1,size);a2.style.fontSize=Math.max(9,size*.8)+'px';
@@ -319,7 +367,7 @@ $('card').addEventListener('wheel',e=>{
 /* drag the window by the card (done in JS so hover still works everywhere) */
 let dragging=null;
 $('card').addEventListener('pointerdown',e=>{
-  if(e.button!==0||e.target.closest('#panel,#ctrl,#barw,#vsl,.btn'))return;
+  if(fsOn||e.button!==0||e.target.closest('#panel,#ctrl,#barw,#vsl,.btn'))return;
   dragging={x:e.screenX,y:e.screenY};$('card').setPointerCapture(e.pointerId)});
 $('card').addEventListener('pointermove',e=>{
   if(!dragging)return;const dx=e.screenX-dragging.x,dy=e.screenY-dragging.y;
@@ -441,15 +489,18 @@ function draw(){
   if(!playing)for(let i=0;i<n;i++)bars[i]*=.9;
 
   // ring / burst geometry depends on layout
-  const k=curLayout==='full'?1:curLayout==='compact'?.5:.45;
+  let k=curLayout==='full'?1:curLayout==='compact'?.5:.45;
   let cx=62*r,cy=62*r,r0=50*r;
   if(curLayout==='compact'){cx=34*r;cy=32*r;r0=25*r}
   else if(curLayout==='viz'){cx=W/2;cy=H/2;r0=Math.min(W,H)*.2}
+  else if(curLayout==='screen'){const ar=$('art').getBoundingClientRect();cx=(ar.left+ar.width/2)*r;cy=(ar.top+ar.height/2)*r;r0=ar.width/2*r*1.06;k=ar.width/84*.9}
 
   ctx.save();
   ctx.translate(S.flipH?W:0,S.flipV?H:0);ctx.scale(S.flipH?-1:1,S.flipV?-1:1);
   ctx.lineCap='round';ctx.lineJoin='round';
   const st=S.style;
+  // full screen: keep the tall styles in the lower part of the screen so they don't bury the text
+  if(curLayout==='screen'&&(st===0||st===2||st===6)){ctx.translate(0,H*.3);ctx.scale(1,.7)}
   if(st===0){
     const bw=W/n,gap=Math.max(1,bw*.2);
     for(let i=0;i<n;i++){const h=Math.max(2*r,bars[i]*H*.85);ctx.fillStyle=color(i,n,.5+bars[i]*.5);
@@ -506,7 +557,7 @@ function draw(){
 
   // fade when idle
   if(playing)idleSince=performance.now();
-  $('card').classList.toggle('idle',S.autoHide&&!playing&&performance.now()-idleSince>6000&&!$('panel').classList.contains('open'));
+  $('card').classList.toggle('idle',S.autoHide&&!fsOn&&!playing&&performance.now()-idleSince>6000&&!$('panel').classList.contains('open'));
 
   // progress + clock
   let pos=seeking?seekPos:(playing?curPos():(m.pos||basePos));
