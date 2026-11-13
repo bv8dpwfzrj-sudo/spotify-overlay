@@ -12,7 +12,7 @@ contextBridge.exposeInMainWorld('api', {
   onToggleFs: cb => ipcRenderer.on('toggle-fs', cb),
   onPcm: cb => ipcRenderer.on('pcm', (_, b) => cb(b)),
   onTapStatus: cb => ipcRenderer.on('tap-status', (_, s) => cb(s)),
-  drag: (dx, dy) => ipcRenderer.send('drag', dx, dy),
+  dragStart: () => ipcRenderer.send('drag-start'),
   dragEnd: () => ipcRenderer.send('drag-end'),
   quit:() => ipcRenderer.send('quit'),
 });

@@ -403,11 +403,11 @@ $('card').addEventListener('wheel',e=>{
 let dragging=null;
 $('card').addEventListener('pointerdown',e=>{
   if(fsOn||e.button!==0||e.target.closest('#panel,#ctrl,#barw,#vsl,.btn'))return;
-  dragging={x:e.screenX,y:e.screenY};$('card').setPointerCapture(e.pointerId)});
-$('card').addEventListener('pointermove',e=>{
-  if(!dragging)return;const dx=e.screenX-dragging.x,dy=e.screenY-dragging.y;
-  if(dx||dy){api.drag(dx,dy);dragging.x=e.screenX;dragging.y=e.screenY}});
-$('card').addEventListener('pointerup',()=>{if(dragging){dragging=null;api.dragEnd()}});
+  // the main process follows the real cursor position (absolute, no accumulated rounding), so the card stays under the mouse
+  dragging=true;api.dragStart();$('card').setPointerCapture(e.pointerId)});
+const endDrag=()=>{if(dragging){dragging=null;api.dragEnd()}};
+['pointerup','pointercancel','lostpointercapture'].forEach(t=>$('card').addEventListener(t,endDrag));
+addEventListener('blur',endDrag);
 
 /* volume slider (vertical, right edge) */
 let vsTimer=null,vsDrag=false;

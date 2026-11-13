@@ -1,6 +1,6 @@
 {
   "name": "spotify-overlay",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Transparent always-on-top Spotify now-playing widget",
   "author": "Spotify Overlay",
   "main": "main.js",

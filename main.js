@@ -12,6 +12,12 @@ const cfg = (() => { try { return JSON.parse(fs.readFileSync(cfgFile)); } catch 
 const save = () => { try { fs.writeFileSync(cfgFile, JSON.stringify(cfg)); } catch {} };
 
 const LAYOUTS = { full: [420, 190], compact: [420, 84], viz: [420, 70] };
+// The widget's exact size in DIPs. Windows rounds sizes on displays with different scaling, so reading the size back
+// and re-applying it makes the window grow by a pixel at a time; we always set our own size and lock it instead.
+let curSize = LAYOUTS.full;
+function lockSize(sz) { win.setMinimumSize(sz[0], sz[1]); win.setMaximumSize(sz[0], sz[1]); }
+function unlockSize() { win.setMinimumSize(0, 0); win.setMaximumSize(0, 0); }
+function placeWidget(x, y, sz) { unlockSize(); win.setBounds({ x, y, width: sz[0], height: sz[1] }); curSize = sz; lockSize(sz); }
 const loginOpts = app.isPackaged ? {} : { path: process.execPath, args: [app.getAppPath()] };
 
 // auto-update (installed app only) via GitHub releases
@@ -121,12 +127,13 @@ function createWindow() {
     webPreferences: { preload: path.join(__dirname, 'preload.js') },
   });
   win.setAlwaysOnTop(true, 'screen-saver');
+  lockSize(curSize);
   win.setIgnoreMouseEvents(!!cfg.clickThrough, { forward: true });
   win.webContents.on('console-message', (e, level, msg) => {
     try { fs.appendFileSync(path.join(os.tmpdir(), 'spotify-overlay-log.txt'), msg + '\n'); } catch {}
   });
   win.loadFile('index.html');
-  win.on('moved', () => { if (inFs) return; const b = win.getBounds(); cfg.x = b.x; cfg.bottom = b.y + b.height; save(); });
+  win.on('moved', () => { if (inFs) return; const [x, y] = win.getPosition(); cfg.x = x; cfg.bottom = y + curSize[1]; save(); });
 }
 
 app.whenReady().then(() => {
@@ -152,7 +159,7 @@ app.whenReady().then(() => {
       click: i => { cfg.clickThrough = i.checked; save(); win.setIgnoreMouseEvents(i.checked, { forward: true }); } },
     { label: 'Start with Windows', type: 'checkbox', checked: app.getLoginItemSettings(loginOpts).openAtLogin,
       click: i => app.setLoginItemSettings({ openAtLogin: i.checked, ...loginOpts }) },
-    { label: 'Reset position', click: () => { const [x, y] = defaultPos(); const h = win.getBounds().height; win.setPosition(x, y + 190 - h); } },
+    { label: 'Reset position', click: () => { const [x, y] = defaultPos(); win.setPosition(x, y + 190 - curSize[1]); } },
     { type: 'separator' },
     updateState.state === 'ready'
       ? { label: `Restart to update to v${updateState.version}`, click: () => installUpdateNow() }
@@ -219,23 +226,39 @@ ipcMain.handle('displays', () => screen.getAllDisplays().map((d, i) => ({
 ipcMain.on('layout', (_, name, displayId) => {
   if (!win) return;
   if (name === 'screen') { // full-screen "now playing" mode: cover a whole display (chosen one, or the one the widget is on)
-    if (!inFs) { prevBounds = win.getBounds(); inFs = true; }
+    if (!inFs) { const [px, py] = win.getPosition(); prevBounds = { x: px, y: py, width: curSize[0], height: curSize[1] }; inFs = true; }
     const chosen = displayId && displayId !== 'follow' ? screen.getAllDisplays().find(d => String(d.id) === String(displayId)) : null;
+    unlockSize();
     win.setBounds((chosen || screen.getDisplayMatching(prevBounds)).bounds);
     win.setAlwaysOnTop(true, 'screen-saver'); win.focus();
     return;
   }
-  if (inFs) { inFs = false; if (prevBounds) win.setBounds(prevBounds); }
   const sz = LAYOUTS[name]; if (!sz) return;
-  const b = win.getBounds();
-  win.setBounds({ x: b.x, y: b.y + b.height - sz[1], width: sz[0], height: sz[1] });
+  let x, y; // anchor the bottom edge so layouts grow upward
+  if (inFs) { inFs = false; x = prevBounds.x; y = prevBounds.y + curSize[1] - sz[1]; }
+  else { const p = win.getPosition(); x = p[0]; y = p[1] + curSize[1] - sz[1]; }
+  placeWidget(x, y, sz);
 });
-ipcMain.on('drag', (_, dx, dy) => {
-  if (!win) return;
-  const b = win.getBounds();
-  win.setBounds({ x: b.x + Math.round(dx), y: b.y + Math.round(dy), width: b.width, height: b.height });
+// Dragging: follow the real cursor (absolute offset from where the drag began) instead of summing mouse deltas,
+// so rounding on scaled monitors can't make the card fall behind the pointer. The exact size is re-stated each time.
+let dragState = null, dragTimer = null;
+function stopDrag() { clearInterval(dragTimer); dragTimer = null; dragState = null; }
+ipcMain.on('drag-start', () => {
+  if (!win || inFs) return;
+  stopDrag();
+  const c = screen.getCursorScreenPoint(), [x, y] = win.getPosition();
+  dragState = { cx: c.x, cy: c.y, x, y };
+  dragTimer = setInterval(() => {
+    if (!dragState || !win || win.isDestroyed()) return stopDrag();
+    const p = screen.getCursorScreenPoint();
+    win.setBounds({ x: dragState.x + p.x - dragState.cx, y: dragState.y + p.y - dragState.cy, width: curSize[0], height: curSize[1] });
+  }, 8);
 });
-ipcMain.on('drag-end', () => { if (inFs) return; const b = win.getBounds(); cfg.x = b.x; cfg.bottom = b.y + b.height; save(); });
+ipcMain.on('drag-end', () => {
+  const wasDragging = !!dragState; stopDrag();
+  if (inFs || !wasDragging) return;
+  const [x, y] = win.getPosition(); cfg.x = x; cfg.bottom = y + curSize[1]; save();
+});
 ipcMain.on('quit',() => { app.isQuitting = true; app.quit(); });
 app.on('before-quit', () => { app.isQuitting = true; if (ps) ps.kill(); if (tap) tap.kill(); });
 app.on('window-all-closed', () => app.quit());
