@@ -518,7 +518,7 @@ function draw(){
     ctx.strokeStyle=color(n/2,n,1);ctx.lineWidth=2*r;ctx.beginPath();ctx.moveTo(pts[0][0],pts[0][1]);
     for(let i=1;i<n;i++){const[x0,y0]=pts[i-1],[x1,y1]=pts[i];ctx.quadraticCurveTo(x0,y0,(x0+x1)/2,(y0+y1)/2)}ctx.stroke();
   }else if(st===3){
-    const cyy=curLayout==='full'?H*.62:H*.5,amp=curLayout==='full'?H*.32:H*.4;
+    const cyy=H*.5,amp=curLayout==='full'?H*.32:H*.4;
     ctx.shadowColor=color(0,1,1);ctx.shadowBlur=10*r;
     for(let pass=0;pass<2;pass++){
       ctx.strokeStyle=color(pass?n/2:0,n,pass?1:.35);ctx.lineWidth=(pass?2.5:6)*r;ctx.beginPath();
@@ -539,7 +539,7 @@ function draw(){
       for(let j=0;j<rows;j++){const on=j<lit;ctx.fillStyle=color(i,n,on?.95:.07);
         ctx.beginPath();ctx.arc(i*cw+cw/2,H-(j+.5)*rh,rad,0,Math.PI*2);ctx.fill()}}
   }else if(st===7){
-    const cyy=curLayout==='full'?H*.62:H*.5,amp=curLayout==='full'?H*.3:H*.4;
+    const cyy=H*.5,amp=curLayout==='full'?H*.3:H*.4;
     for(let s=-1;s<=1;s+=2){
       ctx.strokeStyle=color(s<0?0:n/2,n,s<0?.6:1);ctx.lineWidth=2.2*r;ctx.beginPath();
       for(let i=0;i<WP;i++){const x=i/(WP-1)*W,y=cyy+s*Math.abs(wpts[i])*amp;i?ctx.lineTo(x,y):ctx.moveTo(x,y)}ctx.stroke();
