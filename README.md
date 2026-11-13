@@ -16,6 +16,8 @@ A small, see-through, always-on-top widget for Windows that shows what Spotify i
 - Synced lyrics (from [LRCLIB](https://lrclib.net)) with font, size, color, alignment, animation (incl. karaoke fill), glow and sync offset
 - Layouts: full, compact strip, visualizer only; optional fade when idle
 - **Full-screen "now playing" mode** (F11 / ⛶ / tray): big album art, title, lyrics and visualizer over a blurred album-art, accent or black background; controls hide when the mouse is idle
+- Choose which monitor full screen opens on (or follow the widget)
+- **Automatic updates:** the installed app checks GitHub releases, downloads new versions in the background and offers to restart (or installs when you quit). Turn off in the tray menu.
 - Remembers position and settings; optional start with Windows; tray menu
 
 ## Install

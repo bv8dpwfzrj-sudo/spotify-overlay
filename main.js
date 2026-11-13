@@ -14,6 +14,10 @@ const save = () => { try { fs.writeFileSync(cfgFile, JSON.stringify(cfg)); } cat
 const LAYOUTS = { full: [420, 190], compact: [420, 84], viz: [420, 70] };
 const loginOpts = app.isPackaged ? {} : { path: process.execPath, args: [app.getAppPath()] };
 
+// auto-update (installed app only) via GitHub releases
+let autoUpdater = null;
+if (app.isPackaged) { try { autoUpdater = require('electron-updater').autoUpdater; } catch {} }
+
 // only one overlay at a time
 if (!app.requestSingleInstanceLock()) { app.quit(); }
 else app.on('second-instance', () => { if (win) { win.show(); } });
@@ -62,6 +66,45 @@ function startTap() {
 }
 setInterval(() => { if (win) win.webContents.send('tap-status', tapStatus); }, 2000);
 
+// ---- auto-update: check GitHub releases on start and every 6 h; download in the background; install on restart/quit ----
+let updateState = { state: 'idle' }, manualCheck = false, rebuildTray = () => {};
+function pushUpdate(s) {
+  updateState = s;
+  if (win && !win.isDestroyed()) win.webContents.send('update-status', s);
+  rebuildTray();
+}
+function logUpdate(msg) { try { fs.appendFileSync(path.join(os.tmpdir(), 'spotify-overlay-log.txt'), 'updater: ' + msg + '\n'); } catch {} }
+function setupUpdater() {
+  win.webContents.on('did-finish-load', () => win.webContents.send('update-status', updateState));
+  if (!autoUpdater) return;
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.on('update-available', i => { logUpdate('available ' + i.version); pushUpdate({ state: 'downloading', version: i.version }); });
+  autoUpdater.on('update-not-available', () => {
+    logUpdate('up to date');
+    if (manualCheck) pushUpdate({ state: 'uptodate', transient: true }); else pushUpdate({ state: 'idle' });
+    manualCheck = false;
+  });
+  autoUpdater.on('update-downloaded', i => { logUpdate('downloaded ' + i.version); pushUpdate({ state: 'ready', version: i.version }); });
+  autoUpdater.on('error', e => {
+    logUpdate('error ' + (e && e.message));
+    if (manualCheck) pushUpdate({ state: 'error', transient: true });
+    manualCheck = false;
+  });
+  const check = () => { if (cfg.autoUpdate !== false && updateState.state !== 'ready') autoUpdater.checkForUpdates().catch(() => {}); };
+  setTimeout(check, 15000);
+  setInterval(check, 6 * 3600 * 1000);
+}
+function checkUpdates() {
+  if (!autoUpdater) { pushUpdate({ state: 'dev', transient: true }); return; }
+  manualCheck = true; pushUpdate({ state: 'checking', transient: true });
+  autoUpdater.checkForUpdates().catch(() => {});
+}
+function installUpdateNow() {
+  if (autoUpdater && updateState.state === 'ready') { app.isQuitting = true; autoUpdater.quitAndInstall(true, true); }
+}
+ipcMain.on('install-update', installUpdateNow);
+
 function defaultPos() {
   const wa = screen.getPrimaryDisplay().workArea;
   return [wa.x + wa.width - 440, wa.y + wa.height - 210];
@@ -95,12 +138,13 @@ app.whenReady().then(() => {
   createWindow();
   startBridge();
   startTap();
+  setupUpdater();
 
   const icon = nativeImage.createFromPath(path.join(__dirname, 'build', 'icon.png')).resize({ width: 16, height: 16 });
   tray = new Tray(icon);
   tray.setToolTip('Spotify Overlay');
   const lay = (label, id) => ({ label, click: () => win.webContents.send('set-layout', id) });
-  tray.setContextMenu(Menu.buildFromTemplate([
+  const buildMenu = () => Menu.buildFromTemplate([
     { label: 'Layout', submenu: [lay('Full', 'full'), lay('Compact strip', 'compact'), lay('Visualizer only', 'viz')] },
     { label: 'Full screen (Esc to exit)', click: () => win.webContents.send('toggle-fs') },
     { label: 'Next visualizer style', click: () => win.webContents.send('cycle-viz') },
@@ -110,8 +154,16 @@ app.whenReady().then(() => {
       click: i => app.setLoginItemSettings({ openAtLogin: i.checked, ...loginOpts }) },
     { label: 'Reset position', click: () => { const [x, y] = defaultPos(); const h = win.getBounds().height; win.setPosition(x, y + 190 - h); } },
     { type: 'separator' },
+    updateState.state === 'ready'
+      ? { label: `Restart to update to v${updateState.version}`, click: () => installUpdateNow() }
+      : { label: 'Check for updates now', click: () => checkUpdates() },
+    { label: 'Check for updates automatically', type: 'checkbox', checked: cfg.autoUpdate !== false,
+      click: i => { cfg.autoUpdate = i.checked; save(); } },
+    { type: 'separator' },
     { label: 'Quit', click: () => { app.isQuitting = true; app.quit(); } },
-  ]));
+  ]);
+  tray.setContextMenu(buildMenu());
+  rebuildTray = () => tray.setContextMenu(buildMenu());
   tray.on('click', () => win.show());
 });
 
@@ -162,11 +214,14 @@ ipcMain.on('cmd',(_, c) => {
   if (/^(playpause|next|prev|seek:[0-9.]+|vol:[+-]?[0-9.]+|volset:[0-9.]+)$/.test(c)) { try { fs.appendFileSync(cmdFile, c + '\n'); } catch {} }
 });
 let inFs = false, prevBounds = null;
-ipcMain.on('layout', (_, name) => {
+ipcMain.handle('displays', () => screen.getAllDisplays().map((d, i) => ({
+  id: String(d.id), label: `Display ${i + 1} (${d.size.width}×${d.size.height})` + (d.id === screen.getPrimaryDisplay().id ? ' · primary' : '') })));
+ipcMain.on('layout', (_, name, displayId) => {
   if (!win) return;
-  if (name === 'screen') { // full-screen "now playing" mode: cover the whole display the widget is on
+  if (name === 'screen') { // full-screen "now playing" mode: cover a whole display (chosen one, or the one the widget is on)
     if (!inFs) { prevBounds = win.getBounds(); inFs = true; }
-    win.setBounds(screen.getDisplayMatching(prevBounds).bounds);
+    const chosen = displayId && displayId !== 'follow' ? screen.getAllDisplays().find(d => String(d.id) === String(displayId)) : null;
+    win.setBounds((chosen || screen.getDisplayMatching(prevBounds)).bounds);
     win.setAlwaysOnTop(true, 'screen-saver'); win.focus();
     return;
   }

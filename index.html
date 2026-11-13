@@ -90,6 +90,17 @@
   body.viz #lyr{bottom:auto;top:50%;transform:translateY(-50%)}
   #panel .sec{grid-column:1/-1;font-weight:700;opacity:.8;margin-top:4px;border-top:1px solid #333;padding-top:6px}
 
+  /* update toast */
+  #ut{position:absolute;left:50%;top:8px;transform:translateX(-50%);display:none;align-items:center;gap:10px;padding:5px 6px 5px 12px;border-radius:14px;
+    background:rgba(0,0,0,.78);font-size:11px;white-space:nowrap;z-index:8;box-shadow:0 2px 12px rgba(0,0,0,.5)}
+  #ut.show{display:flex}
+  #ut_btns{display:none;gap:6px}#ut.ready #ut_btns{display:flex}
+  #ut b{font-weight:600;cursor:pointer;padding:2px 9px;border-radius:10px;background:rgba(255,255,255,.14)}
+  #ut b:hover{background:rgba(255,255,255,.28)}
+  #ut #ut_go{background:var(--accent,#1db954);color:#000}
+  body.fs #ut{top:2.2vh;font-size:2.2vh;padding:.8vh .8vh .8vh 1.6vh;border-radius:2vh}
+  body.compact #ut,body.viz #ut{top:3px}
+
   /* volume toast */
   #vt{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;align-items:center;gap:8px;padding:6px 12px;border-radius:20px;
     background:rgba(0,0,0,.65);font-size:12px;font-variant-numeric:tabular-nums;pointer-events:none;opacity:0;transition:opacity .25s;z-index:6}
@@ -135,6 +146,7 @@
   </div>
   <div id="prog"><span id="p">0:00</span><div id="barw"><div id="bar"><div id="fill"></div></div></div><span id="d">0:00</span></div>
   <div id="vsl" title="Spotify volume"><svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9zM16.5 12A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4z"/></svg><input type="range" id="c_vol" min="0" max="100" step="1" value="100"></div>
+  <div id="ut"><span id="ut_txt"></span><span id="ut_btns"><b id="ut_go">Restart</b><b id="ut_later">Later</b></span></div>
   <div id="vt"><span id="vi">🔊</span><div class="vb"><div class="vf" id="vf"></div></div><span id="vn">0%</span></div>
   <div id="lyr"><div id="ly1"></div><div id="ly2"></div></div>
   <div id="fsb" class="btn" title="Full screen (F11)">⛶</div><div id="g" class="btn" title="Settings">⚙</div><div id="x" class="btn" onclick="api.quit()">✕</div>
@@ -153,6 +165,7 @@
       <label>Sensitivity <input type="range" id="s_sens" min="0.4" max="3" step="0.1"></label>
       <label>Opacity <input type="range" id="s_alpha" min="0.2" max="1" step="0.05"></label>
       <label>Full screen background <select id="s_fsBg"><option value="art">Blurred album art</option><option value="accent">Accent gradient</option><option value="black">Black</option></select></label>
+      <label>Full screen monitor <select id="s_fsDisplay"><option value="follow">Follow the widget</option></select></label>
       <label>Audio source <select id="s_source"><option value="spotify">Spotify only</option><option value="system">All system audio</option></select></label>
       <div class="sec">Lyrics</div>
       <label>Show lyrics <input type="checkbox" id="s_lyrics"></label>
@@ -178,7 +191,7 @@ new ResizeObserver(fit).observe(cv);
 
 /* ---------- settings ---------- */
 const STYLES=['Bars','Mirror bars','Spectrum fill','Sound wave','Radial burst','Circle wave','LED dots','Dual wave'];
-const DEF={style:0,flipH:false,flipV:false,sym:false,color:'album',custom:'#1db954',bars:48,sens:1.3,alpha:.85,layout:'full',beat:true,autoHide:false,source:'spotify',fsBg:'art',
+const DEF={style:0,flipH:false,flipV:false,sym:false,color:'album',custom:'#1db954',bars:48,sens:1.3,alpha:.85,layout:'full',beat:true,autoHide:false,source:'spotify',fsBg:'art',fsDisplay:'follow',
   lyrics:true,lyFont:'Segoe UI',lySize:15,lyBold:true,lyColor:'white',lyCustom:'#ffffff',lyAlign:'center',lyAnim:'fade',lyNext:true,lyGlow:true,lyOff:0};
 let S=Object.assign({},DEF);
 try{Object.assign(S,JSON.parse(localStorage.viz2||'{}'))}catch{}
@@ -201,12 +214,19 @@ bind('s_layout','layout');bind('s_style','style',Number);bind('s_color','color')
 bind('s_flipH','flipH',v=>v,'checked');bind('s_flipV','flipV',v=>v,'checked');bind('s_sym','sym',v=>v,'checked');
 bind('s_beat','beat',v=>v,'checked');bind('s_autoHide','autoHide',v=>v,'checked');
 bind('s_bars','bars',Number);bind('s_sens','sens',Number);bind('s_alpha','alpha',Number);bind('s_source','source');bind('s_fsBg','fsBg');$('s_fsBg').addEventListener('input',applyFsBg);
+bind('s_fsDisplay','fsDisplay');$('s_fsDisplay').addEventListener('input',()=>{if(fsOn)applyLayout('screen')});
+async function loadDisplays(){
+  try{const list=await api.displays(),sel=$('s_fsDisplay');
+    sel.innerHTML='<option value="follow">Follow the widget</option>'+list.map(d=>'<option value="'+d.id+'">'+d.label+'</option>').join('');
+    if(![...sel.options].some(o=>o.value===S.fsDisplay)){S.fsDisplay='follow';saveS()}
+    sel.value=S.fsDisplay}catch{}}
+loadDisplays();
 
 /* layout: 'full' | 'compact' | 'viz'. The settings panel always opens in full size. */
 let curLayout='full';
 function applyLayout(l){curLayout=l;const cl=document.body.classList;cl.remove('compact','viz','fs');
   if(l==='screen')cl.add('fs');else if(l!=='full')cl.add(l);
-  api.setLayout(l);setTimeout(()=>{fit();renderLyr(lyIdx)},80);setTimeout(()=>{fit();renderLyr(lyIdx)},400)}
+  api.setLayout(l,S.fsDisplay);setTimeout(()=>{fit();renderLyr(lyIdx)},80);setTimeout(()=>{fit();renderLyr(lyIdx)},400)}
 /* full-screen now-playing mode (not remembered across launches) */
 let fsOn=false;
 function toggleFs(){fsOn=!fsOn;$('panel').classList.remove('open');applyLayout(fsOn?'screen':S.layout);curCursorWake()}
@@ -217,12 +237,27 @@ addEventListener('mousemove',curCursorWake);
 addEventListener('keydown',e=>{if(e.key==='Escape'&&fsOn)toggleFs();else if(e.key==='F11'){e.preventDefault();toggleFs()}});
 $('fsb').onclick=toggleFs;api.onToggleFs(toggleFs);
 applyLayout(S.layout);
-$('g').onclick=()=>{if(!fsOn)applyLayout('full');$('panel').classList.add('open')};
+$('g').onclick=()=>{if(!fsOn)applyLayout('full');loadDisplays();$('panel').classList.add('open')};
 $('done').onclick=()=>{$('panel').classList.remove('open');if(!fsOn)applyLayout(S.layout)};
 api.onSetLayout(l=>{S.layout=l;saveS();syncUI();$('panel').classList.remove('open');fsOn=false;applyLayout(l)});
 function nextStyle(){S.style=(S.style+1)%STYLES.length;saveS();syncUI()}
 api.onCycleViz(nextStyle);
 $('card').addEventListener('dblclick',e=>{if(!e.target.closest('#panel,#ctrl,#barw'))nextStyle()});
+
+/* ---------- app updates (installed version checks GitHub releases) ---------- */
+let utTimer=null;
+api.onUpdate(s=>{
+  const el=$('ut');clearTimeout(utTimer);el.classList.remove('ready');
+  const msg={checking:'Checking for updates…',downloading:'Downloading update v'+(s.version||'')+'…',ready:'Update v'+(s.version||'')+' is ready',
+    uptodate:"You're up to date",error:"Couldn't check for updates",dev:'Updates only work in the installed app'}[s.state];
+  if(!msg){el.classList.remove('show');return}
+  $('ut_txt').textContent=msg;el.classList.add('show');
+  if(s.state==='ready')el.classList.add('ready');
+  if(s.transient)utTimer=setTimeout(()=>el.classList.remove('show'),3200);
+  else if(s.state==='downloading')utTimer=setTimeout(()=>el.classList.remove('show'),4000);
+});
+$('ut_go').onclick=()=>api.installUpdate();
+$('ut_later').onclick=()=>$('ut').classList.remove('show');
 
 /* ---------- media ---------- */
 const ICON_PLAY='<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>',ICON_PAUSE='<svg viewBox="0 0 24 24"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>';
