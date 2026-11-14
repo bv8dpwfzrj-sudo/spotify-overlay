@@ -11,7 +11,11 @@ const cfgFile = path.join(app.getPath('userData'), 'config.json');
 const cfg = (() => { try { return JSON.parse(fs.readFileSync(cfgFile)); } catch { return {}; } })();
 const save = () => { try { fs.writeFileSync(cfgFile, JSON.stringify(cfg)); } catch {} };
 
-const LAYOUTS = { full: [420, 190], compact: [420, 84], viz: [420, 70] };
+// Window sizes are exactly the visible card (no transparent margin), so tools that treat windows as surfaces
+// (e.g. snow that settles on window tops) line up with what you actually see.
+const LAYOUTS = { full: [408, 178], compact: [408, 72], viz: [408, 58] };
+// Older versions used a window 12 px bigger than the card (6 px transparent margin); shift saved positions so the card stays put.
+if (!cfg.exact) { if (cfg.x != null) cfg.x += 6; if (cfg.bottom != null) cfg.bottom -= 6; cfg.exact = true; save(); }
 // The widget's exact size in DIPs. Windows rounds sizes on displays with different scaling, so reading the size back
 // and re-applying it makes the window grow by a pixel at a time; we always set our own size and lock it instead.
 let curSize = LAYOUTS.full;
@@ -119,15 +123,15 @@ ipcMain.on('install-update', installUpdateNow);
 
 function defaultPos() {
   const wa = screen.getPrimaryDisplay().workArea;
-  return [wa.x + wa.width - 440, wa.y + wa.height - 210];
+  return [wa.x + wa.width - LAYOUTS.full[0] - 20, wa.y + wa.height - LAYOUTS.full[1] - 20];
 }
 
 function createWindow() {
   const [dx, dy] = defaultPos();
   // position is stored as the window's bottom edge so layouts can grow upward
-  const y = cfg.bottom != null ? cfg.bottom - 190 : (cfg.y ?? dy);
+  const y = cfg.bottom != null ? cfg.bottom - LAYOUTS.full[1] : (cfg.y ?? dy);
   win = new BrowserWindow({
-    width: 420, height: 190, x: cfg.x ?? dx, y,
+    width: LAYOUTS.full[0], height: LAYOUTS.full[1], x: cfg.x ?? dx, y,
     transparent: true, frame: false, resizable: false, hasShadow: false,
     alwaysOnTop: true, skipTaskbar: true, backgroundColor: '#00000000',
     webPreferences: { preload: path.join(__dirname, 'preload.js') },
@@ -165,7 +169,7 @@ app.whenReady().then(() => {
       click: i => { cfg.clickThrough = i.checked; save(); win.setIgnoreMouseEvents(i.checked, { forward: true }); } },
     { label: 'Start with Windows', type: 'checkbox', checked: app.getLoginItemSettings(loginOpts).openAtLogin,
       click: i => app.setLoginItemSettings({ openAtLogin: i.checked, ...loginOpts }) },
-    { label: 'Reset position', click: () => { const [x, y] = defaultPos(); win.setPosition(x, y + 190 - curSize[1]); } },
+    { label: 'Reset position', click: () => { const [x, y] = defaultPos(); win.setPosition(x, y + LAYOUTS.full[1] - curSize[1]); } },
     { type: 'separator' },
     updateState.state === 'ready'
       ? { label: `Restart to update to v${updateState.version}`, click: () => installUpdateNow() }
