@@ -94,12 +94,12 @@ function Get-Sess {
   return $mgr.GetCurrentSession()
 }
 $inv = [Globalization.CultureInfo]::InvariantCulture
-$lastKey = ''; $artVer = 0; $last = [DateTime]::MinValue; $force = $false
+$lastKey = ''; $artVer = 0; $last = [DateTime]::MinValue; $force = $false; $polls = 0; $volCache = -1; $refreshVol = $false
 while ($true) {
   try {
-    $s = Get-Sess
-    # ---- commands from the overlay ----
+    # ---- commands from the overlay (checked every 100 ms; the media session is only queried when needed) ----
     if ($CmdPath -and (Test-Path $CmdPath)) {
+      $s = Get-Sess
       $cmds = [System.IO.File]::ReadAllLines($CmdPath); Remove-Item $CmdPath -Force -ErrorAction SilentlyContinue
       foreach ($c in $cmds) {
         if (-not $c) { continue }
@@ -120,7 +120,7 @@ while ($true) {
       if ($force) { Start-Sleep -Milliseconds 150 }
     }
     if (-not $force -and ((Get-Date) - $last).TotalMilliseconds -lt 1000) { Start-Sleep -Milliseconds 100; continue }
-    $last = Get-Date; $force = $false
+    $refreshVol = $force; $last = Get-Date; $force = $false; $polls++
     $s = Get-Sess
     if (-not $s) { '{"active":false}'; continue }
     $p = Await ($s.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties])
@@ -148,10 +148,12 @@ while ($true) {
       if ($age -gt 0 -and $age -lt 3600) { $pos += $age * $rate }
       if ($durS -gt 0 -and $pos -gt $durS) { $pos = $durS }
     }
+    # Spotify's volume is a (relatively costly) walk over every audio device: refresh every 3rd poll, or right after a command
+    if ($refreshVol -or ($polls % 3 -eq 1)) { $volCache = $(try { [SpotVol]::Get() } catch { -1 }) }
     $o = [ordered]@{
       active = $true; title = $p.Title; artist = $p.Artist; album = $p.AlbumTitle
       playing = $isPlaying; raw = $tl.Position.TotalSeconds
-      pos = $pos; dur = $durS; vol = $(try { [SpotVol]::Get() } catch { -1 })
+      pos = $pos; dur = $durS; vol = $volCache
       art = $(if ($artVer -gt 0) { "$ArtPath$artVer.jpg" } else { '' })
     }
     $o | ConvertTo-Json -Compress

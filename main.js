@@ -44,7 +44,12 @@ function startBridge() {
 }
 
 // ---- Spotify-only audio: helper captures just Spotify's audio (process loopback) and streams mono PCM ----
-let tap, tapFails = 0, tapStatus = 'waiting', tapCarry = null;
+let tap, tapFails = 0, tapStatus = 'waiting', tapCarry = null, pcmQueue = [], pcmTimer = null;
+function flushPcm() {
+  pcmTimer = null;
+  if (win && !win.isDestroyed() && pcmQueue.length) win.webContents.send('pcm', pcmQueue.length === 1 ? pcmQueue[0] : Buffer.concat(pcmQueue));
+  pcmQueue = [];
+}
 function startTap() {
   const exe = path.join(__dirname, 'tap', 'bin', 'SpotifyTap.exe');
   if (!fs.existsSync(exe)) { tapStatus = 'none'; return; }
@@ -53,7 +58,8 @@ function startTap() {
   tap.stdout.on('data', d => {
     let b = tapCarry ? Buffer.concat([tapCarry, d]) : d;
     if (b.length & 1) { tapCarry = Buffer.from(b.subarray(b.length - 1)); b = b.subarray(0, b.length - 1); } else tapCarry = null;
-    if (win && b.length) win.webContents.send('pcm', Buffer.from(b));
+    // batch ~30 ms of audio per message (about 33 IPC messages/s instead of ~100)
+    if (b.length) { pcmQueue.push(Buffer.from(b)); if (!pcmTimer) pcmTimer = setTimeout(flushPcm, 30); }
   });
   let eb = ''; tap.stderr.setEncoding('utf8');
   tap.stderr.on('data', s => {

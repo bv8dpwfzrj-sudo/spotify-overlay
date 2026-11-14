@@ -90,6 +90,12 @@
   body.viz #lyr{bottom:auto;top:50%;transform:translateY(-50%)}
   #panel .sec{grid-column:1/-1;font-weight:700;opacity:.8;margin-top:4px;border-top:1px solid #333;padding-top:6px}
 
+  /* beat glows: static shadows on pseudo-elements, only their opacity animates (--pulse) */
+  #art{position:relative}
+  #art::after{content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;box-shadow:var(--artglow,none);opacity:var(--pulse,0);will-change:opacity}
+  #card::after{content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+    box-shadow:inset 0 0 36px rgba(var(--acc,29,185,84),.55);opacity:var(--pulse,0);will-change:opacity}
+
   /* update toast */
   #ut{position:absolute;left:50%;top:8px;transform:translateX(-50%);display:none;align-items:center;gap:10px;padding:5px 6px 5px 12px;border-radius:14px;
     background:rgba(0,0,0,.78);font-size:11px;white-space:nowrap;z-index:8;box-shadow:0 2px 12px rgba(0,0,0,.5)}
@@ -166,6 +172,7 @@
       <label>Opacity <input type="range" id="s_alpha" min="0.2" max="1" step="0.05"></label>
       <label>Full screen background <select id="s_fsBg"><option value="art">Blurred album art</option><option value="accent">Accent gradient</option><option value="black">Black</option></select></label>
       <label>Full screen monitor <select id="s_fsDisplay"><option value="follow">Follow the widget</option></select></label>
+      <label>Frame rate <select id="s_fps"><option value="60">Smooth (60 fps)</option><option value="30">Efficient (30 fps)</option></select></label>
       <label>Audio source <select id="s_source"><option value="spotify">Spotify only</option><option value="system">All system audio</option></select></label>
       <div class="sec">Lyrics</div>
       <label>Show lyrics <input type="checkbox" id="s_lyrics"></label>
@@ -185,13 +192,15 @@
 <script>
 const $=id=>document.getElementById(id);
 const cv=$('cv'),ctx=cv.getContext('2d');
-function fit(){const r=devicePixelRatio;cv.width=cv.clientWidth*r;cv.height=cv.clientHeight*r}
+let cvR=1; // canvas pixels per CSS pixel (lowered in full screen: a 2560x1440 canvas is far more work than it needs to be)
+function fit(){let r=devicePixelRatio;if(document.body.classList.contains('fs')&&cv.clientWidth>1400)r=Math.min(r,1400/cv.clientWidth);
+  cvR=r;cv.width=Math.max(1,Math.round(cv.clientWidth*r));cv.height=Math.max(1,Math.round(cv.clientHeight*r))}
 fit();addEventListener('resize',fit);
 new ResizeObserver(fit).observe(cv);
 
 /* ---------- settings ---------- */
 const STYLES=['Bars','Mirror bars','Spectrum fill','Sound wave','Radial burst','Circle wave','LED dots','Dual wave'];
-const DEF={style:0,flipH:false,flipV:false,sym:false,color:'album',custom:'#1db954',bars:48,sens:1.3,alpha:.85,layout:'full',beat:true,autoHide:false,source:'spotify',fsBg:'art',fsDisplay:'follow',
+const DEF={style:0,flipH:false,flipV:false,sym:false,color:'album',custom:'#1db954',bars:48,sens:1.3,alpha:.85,layout:'full',beat:true,autoHide:false,source:'spotify',fsBg:'art',fsDisplay:'follow',fps:60,
   lyrics:true,lyFont:'Segoe UI',lySize:15,lyBold:true,lyColor:'white',lyCustom:'#ffffff',lyAlign:'center',lyAnim:'fade',lyNext:true,lyGlow:true,lyOff:0};
 let S=Object.assign({},DEF);
 try{Object.assign(S,JSON.parse(localStorage.viz2||'{}'))}catch{}
@@ -200,7 +209,7 @@ $('s_style').innerHTML=STYLES.map((n,i)=>'<option value="'+i+'">'+n+'</option>')
 function syncUI(){
   $('s_layout').value=S.layout;$('s_style').value=S.style;$('s_color').value=S.color;$('s_custom').value=S.custom;
   $('s_flipH').checked=S.flipH;$('s_flipV').checked=S.flipV;$('s_sym').checked=S.sym;$('s_beat').checked=S.beat;$('s_autoHide').checked=S.autoHide;
-  $('s_bars').value=S.bars;$('s_sens').value=S.sens;$('s_alpha').value=S.alpha;$('s_source').value=S.source;$('s_fsBg').value=S.fsBg;applyFsBg();
+  $('s_bars').value=S.bars;$('s_sens').value=S.sens;$('s_alpha').value=S.alpha;$('s_source').value=S.source;$('s_fsBg').value=S.fsBg;$('s_fps').value=S.fps;applyFsBg();
   $('s_lyrics').checked=S.lyrics;$('s_lyFont').value=S.lyFont;$('s_lySize').value=S.lySize;$('s_lyBold').checked=S.lyBold;
   $('s_lyColor').value=S.lyColor;$('s_lyCustom').value=S.lyCustom;$('s_lyAlign').value=S.lyAlign;$('s_lyAnim').value=S.lyAnim;
   $('s_lyNext').checked=S.lyNext;$('s_lyGlow').checked=S.lyGlow;$('s_lyOff').value=S.lyOff}
@@ -213,7 +222,7 @@ bind('s_lyNext','lyNext',B,'checked');bind('s_lyGlow','lyGlow',B,'checked');bind
 bind('s_layout','layout');bind('s_style','style',Number);bind('s_color','color');bind('s_custom','custom');
 bind('s_flipH','flipH',v=>v,'checked');bind('s_flipV','flipV',v=>v,'checked');bind('s_sym','sym',v=>v,'checked');
 bind('s_beat','beat',v=>v,'checked');bind('s_autoHide','autoHide',v=>v,'checked');
-bind('s_bars','bars',Number);bind('s_sens','sens',Number);bind('s_alpha','alpha',Number);bind('s_source','source');bind('s_fsBg','fsBg');$('s_fsBg').addEventListener('input',applyFsBg);
+bind('s_bars','bars',Number);bind('s_sens','sens',Number);bind('s_alpha','alpha',Number);bind('s_source','source');bind('s_fps','fps',Number);bind('s_fsBg','fsBg');$('s_fsBg').addEventListener('input',applyFsBg);
 bind('s_fsDisplay','fsDisplay');$('s_fsDisplay').addEventListener('input',()=>{if(fsOn)applyLayout('screen')});
 async function loadDisplays(){
   try{const list=await api.displays(),sel=$('s_fsDisplay');
@@ -281,14 +290,14 @@ api.onMedia(x=>{
     $('title').textContent=x.active?(x.title||'Unknown'):'Nothing playing';
     $('artist').textContent=x.active?(x.artist||''):'Open Spotify';
     if(x.art){const url='file:///'+x.art.replace(/\\/g,'/')+'?'+Date.now();$('art').style.backgroundImage='url("'+url+'")';$('bg').style.backgroundImage='url("'+url+'")';grabColor(url)}
-    else{$('art').style.backgroundImage='none';$('bg').style.backgroundImage='none'}
+    else{$('art').style.backgroundImage='none';$('bg').style.backgroundImage='none';$('art').style.boxShadow='0 6px 20px rgba(0,0,0,.5)';$('card').style.setProperty('--artglow','none')}
   }
   const lk=x.active?x.title+'|'+x.artist:'';
   if(lk!==lyKey)lyLoad(x,lk);
 });
 
 /* ---------- lyrics (synced, from LRCLIB) ---------- */
-let lyr=null,lyKey='',lyState='',lyIdx=-2;
+let lyr=null,lyKey='',lyState='',lyIdx=-2,lyKp='';
 function lyLoad(x,key){
   lyKey=key;lyr=null;lyIdx=-2;lyState=key?'loading…':'';renderLyr(-1);
   if(!key||!x.title)return;
@@ -334,7 +343,7 @@ function updateLyrics(pos){
   if(i!==lyIdx){lyIdx=i;renderLyr(i)}
   if(i>=0&&S.lyAnim==='karaoke'){
     const end=lyr[i+1]?lyr[i+1].t:lyr[i].t+4,f=Math.max(0,Math.min(1,(p-lyr[i].t)/Math.max(.3,end-lyr[i].t)));
-    $('ly1').style.setProperty('--kp',(f*100).toFixed(1)+'%');
+    const kp=(f*100).toFixed(0)+'%';if(kp!==lyKp){lyKp=kp;$('ly1').style.setProperty('--kp',kp)}
   }
 }
 applyLyStyle();
@@ -349,6 +358,7 @@ function edgeColors(img){
     for(const s of sides)if(s>=0){const a=sums[s];a[0]+=d[k];a[1]+=d[k+1];a[2]+=d[k+2];a[3]++}
   }
   edge=sums.map(a=>{let r=a[0]/a[3],gg=a[1]/a[3],b=a[2]/a[3];const mx=Math.max(r,gg,b,1),f=Math.min(230/mx,2.2);return [r*f|0,gg*f|0,b*f|0]});
+  $('art').style.boxShadow=artGlow(0);$('card').style.setProperty('--artglow',artGlow(1)); // base glow now, stronger glow fades in on beats
 }
 function artGlow(p){
   const e=edge||[accent,accent,accent,accent],blur=16+16*p,off=3+5*p,a=(.55+.35*p).toFixed(2);
@@ -378,7 +388,7 @@ function dominantColor(img){
 function grabColor(url){
   const i=new Image();i.onload=()=>{edgeColors(i);
     accent=dominantColor(i);
-    document.documentElement.style.setProperty('--accent','rgb('+accent+')');applyLyStyle()};
+    document.documentElement.style.setProperty('--accent','rgb('+accent+')');document.documentElement.style.setProperty('--acc',accent.join(','));applyLyStyle()};
   i.src=url;
 }
 
@@ -428,18 +438,32 @@ $('barw').addEventListener('pointerup',e=>{if(!seeking)return;seeking=false;$('b
 
 /* ---------- audio (system loopback) ---------- */
 const FFT=2048;let analyser,freq=new Uint8Array(FFT/2),wave=new Uint8Array(FFT),audioErr='';
-(async()=>{try{
-  const st=await navigator.mediaDevices.getDisplayMedia({video:true,audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false,channelCount:2}});
-  window._st=st;
-  const at=st.getAudioTracks();
-  if(!at.length){audioErr='no audio track';return}
-  const el=document.createElement('audio');el.srcObject=st;el.volume=0;el.play().catch(()=>{});window._el=el;
-  st.getVideoTracks().forEach(t=>t.enabled=false);
-  const ac=new AudioContext();window._ac=ac;ac.resume();setInterval(()=>{if(ac.state!=='running')ac.resume()},2000);
-  analyser=ac.createAnalyser();analyser.fftSize=FFT;analyser.smoothingTimeConstant=.6;analyser.minDecibels=-90;analyser.maxDecibels=-20;
-  const src=ac.createMediaStreamSource(new MediaStream(at));src.connect(analyser);
-  const sink=ac.createGain();sink.gain.value=0;src.connect(sink);sink.connect(ac.destination);
-}catch(e){audioErr=String(e);console.log('audio error',e)}})();
+/* The all-system-audio capture is a fallback. It records the whole screen in the background (expensive), so it only
+   runs when the Spotify-only helper can't be used (or you pick "All system audio"). */
+let lb=null;
+async function startLoopback(){
+  if(lb)return;lb={starting:true};
+  try{
+    const st=await navigator.mediaDevices.getDisplayMedia({video:true,audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false,channelCount:2}});
+    const at=st.getAudioTracks();
+    if(!at.length){audioErr='no audio track';st.getTracks().forEach(t=>t.stop());lb=null;return}
+    const el=document.createElement('audio');el.srcObject=st;el.volume=0;el.play().catch(()=>{});
+    st.getVideoTracks().forEach(t=>t.enabled=false);
+    const ac=new AudioContext();ac.resume();
+    const an=ac.createAnalyser();an.fftSize=FFT;an.smoothingTimeConstant=.6;an.minDecibels=-90;an.maxDecibels=-20;
+    const src=ac.createMediaStreamSource(new MediaStream(at));src.connect(an);
+    const sink=ac.createGain();sink.gain.value=0;src.connect(sink);sink.connect(ac.destination);
+    const keep=setInterval(()=>{if(ac.state!=='running')ac.resume()},2000);
+    analyser=an;lb={st,el,ac,keep};audioErr='';
+  }catch(e){audioErr=String(e);lb=null}
+}
+function stopLoopback(){
+  if(!lb||lb.starting)return;
+  clearInterval(lb.keep);lb.st.getTracks().forEach(t=>t.stop());lb.el.srcObject=null;lb.ac.close().catch(()=>{});
+  analyser=null;lb=null;
+}
+function checkLoopback(){const need=!tapUsable();if(need&&!lb)startLoopback();else if(!need&&lb)stopLoopback()}
+setTimeout(checkLoopback,1500);setInterval(checkLoopback,2000);
 
 /* ---------- visualizer ---------- */
 let bars,vals,t=0,peakT=.05,lastLog=0,pulse=0,beatAvg=0,lastBeat=0;
@@ -469,15 +493,16 @@ function tapUsable(){return S.source==='spotify'&&tapState!=='none'&&!tapState.s
 function fftFromRing(){
   if(performance.now()-lastPcm>300){freq.fill(0);wave.fill(128);FS.fill(0);return}
   // slow-decay peak of the recent loudness -> automatic gain so quiet volume still moves the bars
-  let e=0;for(let i=0;i<1024;i++){const s=ring[(rw-1-i)&(RING-1)];e+=s*s}
-  const rms=Math.sqrt(e/1024);rmsPeak=Math.max(rmsPeak*.998,rms,.02);
+  let e=0;for(let i=0;i<1024;i+=2){const s=ring[(rw-1-i)&(RING-1)];e+=s*s}
+  const rms=Math.sqrt(e/512);rmsPeak=Math.max(rmsPeak*Math.pow(.998,dtG*60),rms,.02);
   const g=Math.max(1,Math.min(8,.2/rmsPeak));
   for(let i=0;i<FFT;i++){const s=ring[(rw-FFT+i)&(RING-1)]*g;wave[i]=Math.max(0,Math.min(255,Math.round(128+s*128)));FR[REV[i]]=s*FW[i];FI[REV[i]]=0}
   for(let size=2;size<=FFT;size<<=1){const half=size>>1,step=FFT/size;
     for(let i=0;i<FFT;i+=size)for(let j=0,k=0;j<half;j++,k+=step){
       const a=i+j,b=a+half,tr=FR[b]*CT[k]-FI[b]*ST[k],ti=FR[b]*ST[k]+FI[b]*CT[k];
       FR[b]=FR[a]-tr;FI[b]=FI[a]-ti;FR[a]+=tr;FI[a]+=ti}}
-  for(let k=0;k<FFT/2;k++){FS[k]=.6*FS[k]+.4*(Math.hypot(FR[k],FI[k])/FFT);
+  const sm=Math.pow(.6,dtG*60); // only the bins the visualizer actually reads (below ~13 kHz)
+  for(let k=0;k<560;k++){FS[k]=sm*FS[k]+(1-sm)*(Math.sqrt(FR[k]*FR[k]+FI[k]*FI[k])/FFT);
     const db=20*Math.log10(FS[k]+1e-9);freq[k]=Math.max(0,Math.min(255,Math.round(255*(db+90)/70)))}
 }
 function fillAudio(){
@@ -496,13 +521,13 @@ function compute(playing){
       v=Math.pow(mx/255,1.25)*S.sens*(1+.9*k/kn);
     }else if(playing){v=(.3+.3*Math.sin(t*3+k*.5)*Math.sin(t*1.3+k*.2))*S.sens*.8}
     v=Math.min(v,1.15);vals[i]=v;
-    bars[i]+=(v-bars[i])*(v>bars[i]?.65:.18);
+    bars[i]+=(v-bars[i])*(1-Math.pow(1-(v>bars[i]?.65:.18),dtG*60));
   }
   // beat detection on the bass bins
   const bn=Math.max(2,Math.round(n*.08));let bass=0;for(let i=0;i<bn;i++)bass+=vals[i];bass/=bn;
-  beatAvg+=(bass-beatAvg)*.04;
+  beatAvg+=(bass-beatAvg)*(1-Math.pow(.96,dtG*60));
   if(bass>beatAvg*1.3+.06&&t-lastBeat>.2){pulse=1;lastBeat=t}
-  pulse*=.88;
+  pulse*=Math.pow(.88,dtG*60);
   let mxA=0;
   for(let i=0;i<WP;i++){
     let s=0;
@@ -510,18 +535,29 @@ function compute(playing){
     else if(playing){s=Math.sin(t*6+i*.15)*.35*Math.sin(t*1.7+i*.05)}
     wpts[i]=s;if(Math.abs(s)>mxA)mxA=Math.abs(s);
   }
-  peakT=Math.max(peakT*.995,mxA,.04);
+  peakT=Math.max(peakT*Math.pow(.995,dtG*60),mxA,.04);
   const g=Math.min(.9/peakT,12)*Math.min(S.sens/1.3,2);
   for(let i=0;i<WP;i++)wpts[i]*=g;
 }
 
+/* Frame pacing: never above 60 fps (even on 120/144 Hz monitors), optional 30 fps, and a slow tick when nothing is playing. */
+let dtG=.0167,lastFrame=0,cache={};
+const setTxt=(el,v)=>{if(cache[el.id]!==v){cache[el.id]=v;el.textContent=v}};
+function loop(now){
+  requestAnimationFrame(loop);
+  const calm=!(m.active&&m.playing)&&!fsOn&&!seeking&&!dragging;
+  const target=calm?250:(S.fps===30?33:16.2);
+  if(now-lastFrame<target-1)return;
+  dtG=Math.min(.1,(now-lastFrame)/1000||.0167);lastFrame=now;
+  draw();
+}
 function draw(){
-  requestAnimationFrame(draw);t+=.016;
-  const W=cv.width,H=cv.height,r=devicePixelRatio,n=S.bars;
+  t+=dtG;
+  const W=cv.width,H=cv.height,r=cvR,n=S.bars;
   ctx.clearRect(0,0,W,H);
   const playing=!!(m.active&&m.playing);
   compute(playing);
-  if(!playing)for(let i=0;i<n;i++)bars[i]*=.9;
+  if(!playing){const dk=Math.pow(.9,dtG*60);for(let i=0;i<n;i++)bars[i]*=dk}
 
   // ring / burst geometry depends on layout
   let k=curLayout==='full'?1:curLayout==='compact'?.5:.45;
@@ -554,8 +590,7 @@ function draw(){
     for(let i=1;i<n;i++){const[x0,y0]=pts[i-1],[x1,y1]=pts[i];ctx.quadraticCurveTo(x0,y0,(x0+x1)/2,(y0+y1)/2)}ctx.stroke();
   }else if(st===3){
     const cyy=H*.5,amp=curLayout==='full'?H*.32:H*.4;
-    ctx.shadowColor=color(0,1,1);ctx.shadowBlur=10*r;
-    for(let pass=0;pass<2;pass++){
+    for(let pass=0;pass<2;pass++){ // pass 0 is the soft wide glow (cheaper than canvas shadowBlur)
       ctx.strokeStyle=color(pass?n/2:0,n,pass?1:.35);ctx.lineWidth=(pass?2.5:6)*r;ctx.beginPath();
       for(let i=0;i<WP;i++){const x=i/(WP-1)*W,y=cyy+wpts[i]*amp;i?ctx.lineTo(x,y):ctx.moveTo(x,y)}ctx.stroke();
     }
@@ -565,14 +600,17 @@ function draw(){
       ctx.beginPath();ctx.moveTo(cx+Math.cos(a)*r0,cy+Math.sin(a)*r0);ctx.lineTo(cx+Math.cos(a)*r1,cy+Math.sin(a)*r1);ctx.stroke()}
   }else if(st===5){
     const rr0=r0*1.04;
-    ctx.shadowColor=color(0,1,1);ctx.shadowBlur=8*r;ctx.strokeStyle=color(n/2,n,1);ctx.lineWidth=2.5*r;ctx.beginPath();
-    for(let i=0;i<=WP;i++){const kk=i%WP,a=i/WP*Math.PI*2-Math.PI/2,rr=rr0+wpts[kk]*16*k*r;
-      const x=cx+Math.cos(a)*rr,y=cy+Math.sin(a)*rr;i?ctx.lineTo(x,y):ctx.moveTo(x,y)}ctx.stroke();
+    for(let pass=0;pass<2;pass++){
+      ctx.strokeStyle=color(n/2,n,pass?1:.3);ctx.lineWidth=(pass?2.5:7)*r;ctx.beginPath();
+      for(let i=0;i<=WP;i++){const kk=i%WP,a=i/WP*Math.PI*2-Math.PI/2,rr=rr0+wpts[kk]*16*k*r;
+        const x=cx+Math.cos(a)*rr,y=cy+Math.sin(a)*rr;i?ctx.lineTo(x,y):ctx.moveTo(x,y)}ctx.stroke();
+    }
   }else if(st===6){
     const rows=curLayout==='full'?9:5,cw=W/n,rh=(H*.9)/rows,rad=Math.min(cw,rh)*.32;
-    for(let i=0;i<n;i++){const lit=Math.round(bars[i]*rows);
-      for(let j=0;j<rows;j++){const on=j<lit;ctx.fillStyle=color(i,n,on?.95:.07);
-        ctx.beginPath();ctx.arc(i*cw+cw/2,H-(j+.5)*rh,rad,0,Math.PI*2);ctx.fill()}}
+    for(let i=0;i<n;i++){const lit=Math.round(bars[i]*rows),cOn=color(i,n,.95),cOff=color(i,n,.07);
+      for(let pass=0;pass<2;pass++){ctx.fillStyle=pass?cOn:cOff;ctx.beginPath(); // one path per column and colour, not per dot
+        for(let j=pass?0:lit;j<(pass?lit:rows);j++){ctx.moveTo(i*cw+cw/2+rad,H-(j+.5)*rh);ctx.arc(i*cw+cw/2,H-(j+.5)*rh,rad,0,Math.PI*2)}
+        ctx.fill()}}
   }else if(st===7){
     const cyy=H*.5,amp=curLayout==='full'?H*.3:H*.4;
     for(let s=-1;s<=1;s+=2){
@@ -582,26 +620,25 @@ function draw(){
   }
   ctx.restore();
 
-  // art glow from its edge colors (swells with the beat)
-  $('art').style.boxShadow=m.art?artGlow(S.beat&&playing?pulse:0):'0 6px 20px rgba(0,0,0,.5)';
-  // beat pulse: art bump + inner glow on the card
-  if(S.beat&&playing){
-    $('art').style.transform='scale('+(1+.07*pulse).toFixed(3)+')';
-    $('card').style.boxShadow='0 0 0 1px rgba(255,255,255,.08) inset,0 0 '+(36*pulse).toFixed(1)+'px rgba('+accent+','+(.55*pulse).toFixed(2)+') inset';
-  }else{$('art').style.transform='';$('card').style.boxShadow=''}
+  // beat pulse: the glows are pseudo-elements whose opacity follows --pulse (compositor-only; no per-frame repaint of big shadows)
+  const pq=S.beat&&playing?Math.round(pulse*50)/50:0;
+  if(cache.pulse!==pq){cache.pulse=pq;$('card').style.setProperty('--pulse',pq);$('art').style.transform=pq?'scale('+(1+.07*pq).toFixed(3)+')':''}
 
   // fade when idle
   if(playing)idleSince=performance.now();
   $('card').classList.toggle('idle',S.autoHide&&!fsOn&&!playing&&performance.now()-idleSince>6000&&!$('panel').classList.contains('open'));
 
-  // progress + clock
+  // progress + clock (DOM is only touched when the text actually changes)
   let pos=seeking?seekPos:(playing?curPos():(m.pos||basePos));
   if(m.dur&&pos>m.dur)pos=m.dur;
-  if(!vsDrag&&vol>=0)$('c_vol').value=Math.round(vol*100);
+  if(!vsDrag&&vol>=0&&cache.vol!==vol){cache.vol=vol;$('c_vol').value=Math.round(vol*100)}
   updateLyrics(pos);
-  $('p').textContent=fmt(pos);$('d').textContent=fmt(m.dur||0);
-  $('fill').style.width=(m.dur?pos/m.dur*100:0)+'%';
-  const d=new Date();$('clock').textContent=d.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})+'  ·  '+d.toLocaleDateString([], {weekday:'short',month:'short',day:'numeric'});
+  setTxt($('p'),fmt(pos));setTxt($('d'),fmt(m.dur||0));
+  const fw=(m.dur?pos/m.dur*100:0).toFixed(1)+'%';
+  if(cache.fw!==fw){cache.fw=fw;$('fill').style.width=fw}
+  const d=new Date(),mk=d.getMinutes();
+  if(cache.clk!==mk||!cache.clkTxt){cache.clk=mk;cache.clkTxt=d.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})+'  ·  '+d.toLocaleDateString([], {weekday:'short',month:'short',day:'numeric'})}
+  setTxt($('clock'),cache.clkTxt);
 
   const tn=performance.now();
   if(tn-lastLog>2000){lastLog=tn;
@@ -611,5 +648,5 @@ function draw(){
     $('status').textContent=msg+'  ·  Lyrics: '+(lyState||'—');console.log($('status').textContent+' | idx '+lyIdx+' | '+$('ly1').textContent);
   }
 }
-draw();
+requestAnimationFrame(loop);
 </script></body></html>
